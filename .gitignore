@@ -1,3 +1,11 @@
-﻿*.exe
-__oath_*
+﻿# Binaries & Object files
+*.exe
 *.o
+oath-htse
+
+# Compiler temporary runner files
+__oath_*
+
+# OS metadata
+Thumbs.db
+.DS_Store
