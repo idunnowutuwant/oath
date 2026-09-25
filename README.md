@@ -1,3 +1,5 @@
+﻿![OATH](banner.svg)
+
 # OATH
 
 OATH is a certifying systems compiler that proves memory safety, arithmetic boundedness, and functional contracts at compile time. It emits branchless, vectorizable C99 code with zero runtime checks.
