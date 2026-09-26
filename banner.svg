@@ -1,66 +1,23 @@
-﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 280" width="100%" height="auto">
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 260" width="100%" height="auto">
   <defs>
-    <!-- Ultra-subtle Top Ambient Light -->
-    <radialGradient id="topGlow" cx="15%" cy="0%" r="70%">
-      <stop offset="0%" stop-color="#1c1c21"/>
-      <stop offset="100%" stop-color="#050507"/>
+    <radialGradient id="bg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#141418" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#040405" stop-opacity="1"/>
     </radialGradient>
   </defs>
 
   <style>
-    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .wordmark { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 900; }
+    .sub { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   </style>
 
-  <!-- Pitch Black Solid Surface -->
-  <rect width="1000" height="280" rx="12" fill="url(#topGlow)"/>
-  <rect width="998" height="278" x="1" y="1" rx="11" fill="none" stroke="#1f1f24" stroke-width="1"/>
+  <!-- Frame Surface -->
+  <rect width="1000" height="260" rx="12" fill="url(#bg)"/>
+  <rect width="998" height="258" x="1" y="1" rx="11" fill="none" stroke="#18181e" stroke-width="1"/>
 
-  <!-- Left-Aligned Content Container (x = 64px) -->
+  <!-- Centered Bold Monolith Wordmark -->
+  <text x="500" y="142" class="wordmark" font-size="94" fill="#ffffff" letter-spacing="-0.045em" text-anchor="middle">OATH</text>
 
-  <!-- 1. Metadata Pill Badge -->
-  <g transform="translate(64, 40)">
-    <rect width="168" height="24" rx="12" fill="#111114" stroke="#26262b" stroke-width="1"/>
-    <circle cx="14" cy="12" r="3" fill="#22c55e"/>
-    <text x="26" y="16" class="mono" font-size="11" font-weight="600" fill="#a1a1aa" letter-spacing="1">OATH CORE · v1.0</text>
-  </g>
-
-  <!-- 2. Primary Wordmark (No tacky logo, pure heavy typography) -->
-  <text x="64" y="122" class="sans" font-size="54" font-weight="900" letter-spacing="-0.04em" fill="#ffffff">OATH</text>
-
-  <!-- 3. Introduction / Specification -->
-  <text x="64" y="156" class="sans" font-size="15" font-weight="400" fill="#a1a1aa">
-    The certifying systems compiler.
-    <tspan fill="#52525b">Formal compile-time proofs. Zero runtime checks. Native C99.</tspan>
-  </text>
-
-  <!-- 4. Hairline Structural Divider -->
-  <line x1="64" y1="192" x2="936" y2="192" stroke="#1a1a1e" stroke-width="1"/>
-
-  <!-- 5. 4-Column Minimal Spec Strip (Pure numbers, no bulky boxes) -->
-  <g transform="translate(64, 215)">
-    <!-- Column 1 -->
-    <g transform="translate(0, 0)">
-      <text x="0" y="20" class="mono" font-size="20" font-weight="700" letter-spacing="-0.02em" fill="#fafafa">4.38B <tspan font-size="12" font-weight="500" fill="#71717a">ops/s</tspan></text>
-      <text x="0" y="38" class="mono" font-size="10" font-weight="500" fill="#52525b" letter-spacing="1">THROUGHPUT</text>
-    </g>
-
-    <!-- Column 2 -->
-    <g transform="translate(230, 0)">
-      <text x="0" y="20" class="mono" font-size="20" font-weight="700" letter-spacing="-0.02em" fill="#fafafa">0.23 <tspan font-size="12" font-weight="500" fill="#71717a">ns</tspan></text>
-      <text x="0" y="38" class="mono" font-size="10" font-weight="500" fill="#52525b" letter-spacing="1">LATENCY / OP</text>
-    </g>
-
-    <!-- Column 3 -->
-    <g transform="translate(460, 0)">
-      <text x="0" y="20" class="mono" font-size="20" font-weight="700" letter-spacing="-0.02em" fill="#22c55e">0.000000%</text>
-      <text x="0" y="38" class="mono" font-size="10" font-weight="500" fill="#52525b" letter-spacing="1">HARDWARE TRAPS</text>
-    </g>
-
-    <!-- Column 4 -->
-    <g transform="translate(690, 0)">
-      <text x="0" y="20" class="mono" font-size="20" font-weight="700" letter-spacing="-0.02em" fill="#fafafa">C99 <tspan font-size="12" font-weight="500" fill="#71717a">restrict</tspan></text>
-      <text x="0" y="38" class="mono" font-size="10" font-weight="500" fill="#52525b" letter-spacing="1">CODEGEN</text>
-    </g>
-  </g>
+  <!-- Timeless Enterprise Subline -->
+  <text x="500" y="180" class="sub" font-size="11" font-weight="600" fill="#52525b" letter-spacing="0.32em" text-anchor="middle">CERTIFYING SYSTEMS</text>
 </svg>
