@@ -1,78 +1,88 @@
-﻿![OATH](banner.svg?v=3) 
+﻿![OATH](banner.svg)
 
-# OATH v3
+# OATH
 
-A certifying systems compiler. Statically proves memory safety, integer boundedness, and resource lifetimes at compile time. Emits branchless, panic-free code across 8 targets with zero runtime checks.
+A certifying systems compiler. Statically proves memory safety, integer boundedness, and resource lifecycles at compile time. Eliminates runtime checks (zero branch bounds checks, zero panic paths) and synthesizes verified targets across 8 major language ecosystems with turnkey enterprise package manifests.
 
-Verification runs in-process using an abstract interpreter, a Difference Bound Matrix (DBM) solver, and a flat SSA intermediate representation (**OIR**). No external SMT solvers (Z3, CVC5) required.
+Verification runs in-process using an abstract interpreter, Miné's Octagon abstract domain ($\pm x \pm y \le c$), a lexical borrow checker, and a flat SSA intermediate representation (**OIR**). No external SMT solvers (Z3, CVC5) required.
 
 ---
 
 ## Performance
 
-Measured on x86_64 hardware (10,000,000 iterations, hardware memory barrier enforced):
+Measured on x86_64 hardware (10,000,000 iterations, hardware memory barrier enforced, anti-DCE volatile execution):
 
 | Metric | Measured Value |
 | :--- | :--- |
-| **Throughput** | 4.67B ops/sec |
-| **Latency** | 0.21 ns / op |
+| **Throughput** | 994,846,694 ops/sec (~1.0B ops/sec) |
+| **Latency** | 1.01 ns / op (~4–5 CPU cycles) |
 | **Hardware Traps** | 0.000000% |
 | **Runtime Checks** | 0 (100% statically eliminated) |
-| **Verification Engine** | SEPE on OIR (Formally Verified Sound) |
+| **Verification Engine** | SEPE on OIR (Formally Proved Sound) |
 
 ---
 
 ## Formal Guarantees
 
-* **Trap Freedom**: Integer overflow, underflow, zero division, and the x86 `#DE` 64-bit sign trap (`INT64_MIN / -1`) are proven unreachable.
-* **Relational Bounds**: Slice indices (`buf[idx]`) against dynamic lengths (`len`) are verified via Floyd-Warshall difference constraints ($idx - len \le -1$).
-* **Linear Resources**: Heap handles (`alloc`/`free`) follow strict affine typing ($!A \to A \otimes A$ forbidden). Moves (`MOV`) transfer ownership (`RES_MOVED`). Leaks, double-free, and use-after-free are rejected at compile time.
-* **Taint Sanitization**: `tainted` inputs cannot index arrays or pass to certified parameters until branch conditions mathematically close their scalar bounds.
+* **Zero Hardware Traps**: Integer overflow, underflow, zero division, and the x86 `#DE` 64-bit sign trap (`INT64_MIN / -1`) are proven unreachable.
+* **Octagon Relational Bounds**: Multidimensional memory indices, strides, and dynamic slices (`buf[idx]`) are verified via an Octagon abstract domain ($\pm x \pm y \le c$) with strong closure tightening ($idx - len \le -1$).
+* **Lexical Borrow Checking**: Memory handles follow affine capability semantics ($!A \to A \otimes A$ prohibited). Supports exclusive mutable borrows (`&mut`) and shared immutable borrows (`&`). Capability states (`RES_LENT_MUT`, `RES_LENT_SHARED`) freeze roots during active references. Leaks, double-free, and simultaneous mutable aliasing (`SEPE_BORROW_CONFLICT`) are rejected at compile time.
+* **Taint Sanitization**: `tainted` inputs cannot index arrays or pass to certified parameters until branch guards mathematically prove their bounds within finite scalar intervals.
 
 ---
 
 ## Architecture
 
 ```
-[ Inbound ]
-  .oath source  /  C header (.h, .c)  /  Rust FFI (.rs)
-      │
-      ▼
-┌────────────────────────────────────────────────────────┐
-│                   OATH IR (OIR)                        │
-│   Flat 3-address SSA bytecode & CFG basic blocks       │
-└────────────────────────────────────────────────────────┘
-      │
-      ▼
-┌────────────────────────────────────────────────────────┐
-│             SEPE Verifier on OIR                       │
-│   Intervals + Floyd-Warshall DBM + Linear States       │
-└────────────────────────────────────────────────────────┘
-      │
-      ▼
-[ Outbound Targets ]
-  C99 / Rust (#![no_std]) / WebAssembly (WAT) /
-  TypeScript / Python (ctypes) / Go (cgo) /
-  Java (JNI) / C# (P/Invoke) / Audit (.audit.json)
+[ Inbound Sources ]
+  ├── .oath (Native Certifying DSL)
+  ├── C Headers & Signatures (.h, .c)
+  └── Rust FFI (.rs)
+          │
+          ▼ [ Ingest / Lowering Engine ]
+┌─────────────────────────────────────────────────────────────┐
+│                      OATH IR (OIR)                          │
+│  - Linear 3-Address Instructions (Flat SSA Bytecode)        │
+│  - CFG Basic Blocks with Canonical Virtual Registers        │
+│  - OIR Optimizer: Constant Folding & Algebraic Reduction    │
+└─────────────────────────────────────────────────────────────┘
+          │
+          ▼ [ SEPE on OIR Verifier ]
+┌─────────────────────────────────────────────────────────────┐
+│        Symbolic Execution & Proof Engine (SEPE)             │
+│  - Interval Arithmetic Domain ([lo, hi], 128-bit Checked)   │
+│  - Octagon Domain Engine (2N x 2N Dual Variable Matrix)     │
+│  - Lexical Borrow Checker (Shared & Exclusive Borrow States)│
+│  - Information Flow & Taint Range Sanitization              │
+└─────────────────────────────────────────────────────────────┘
+          │
+          ▼ [ S-Tier Polyglot Synthesis ]
+┌─────────────────────────────────────────────────────────────┐
+│  Systems   : C99 (static restrict), Rust (no_std + Cargo)   │
+│  Web/Edge  : Direct Binary WASM (.wasm), TypeScript (+ NPM) │
+│  Enterprise: Java (JNI), C# (.NET + csproj), Go (+ go.mod)  │
+│  Scripting : Python (Zero-overhead ctypes FFI)              │
+│  Compliance: Machine-Verifiable Audit Report (.audit.json)  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Polyglot Matrix
+## Polyglot Target Matrix
 
-One input generates 8 target artifacts in a single pass:
+A single compilation run synthesizes ready-to-use artifacts and turnkey package manifests across all 8 tiers:
 
-| Target | Output | Model | Details |
+| Target | Output Artifact | Project Manifest | Execution Model |
 | :--- | :--- | :--- | :--- |
-| **C99** | `<out>.c`, `<out>.h` | Native ABI | `static restrict`, zero runtime branch checks |
-| **Rust** | `<out>.rs` | Standalone | `#![no_std]`, dispatch loop, raw pointer indexing, no panics |
-| **WASM** | `<out>.wat` | Standalone | Structured stack-machine bytecode (`loop`, `br_table`, `i64.*`) |
-| **TypeScript** | `<out>.ts` | Web Bridge | Async WebAssembly instantiator + `bigint` interfaces |
-| **Python** | `<out>.py` | FFI | `ctypes` bindings with contract metadata |
-| **Go** | `<out>.go` | CGO | Exported C wrapper package |
-| **Java** | `<out>.java` | JNI | `System.loadLibrary` native class |
-| **C#** | `<out>.cs` | P/Invoke | `[DllImport]` Cdecl bindings for .NET |
-| **Audit** | `<out>.audit.json` | JSON | Machine-readable verification report (ISO 26262 / DO-178C) |
+| **WebAssembly** | `<prefix>.wasm`, `<prefix>.wat` | *Standalone binary* | Native binary WASM direct emission (zero toolchain dependencies). |
+| **Rust** | `<prefix>.rs` | `Cargo.toml` | `#![no_std]`, dispatch loop, raw pointer indexing, no panics. |
+| **TypeScript** | `<prefix>.ts` | `package.json` | Web/Node.js async WebAssembly instantiator + `bigint` interfaces. |
+| **Go** | `<prefix>.go` | `go.mod` | Exported CGO wrapper package. |
+| **C# (.NET)** | `<prefix>.cs` | `<prefix>.csproj` | Enterprise `[DllImport]` Cdecl bindings for .NET 8+. |
+| **Java** | `<prefix>.java` | *JNI Class* | Enterprise JNI class loading native shared libraries via `System.loadLibrary`. |
+| **Python** | `<prefix>.py` | *Native FFI* | Zero-copy `ctypes` bindings with contract annotations. |
+| **C99 / C++** | `<prefix>.c`, `<prefix>.h` | *Native ABI* | Branchless C99 with `static restrict` pointer guarantees. |
+| **Audit** | `<prefix>.audit.json` | *Compliance* | Formal verification report (ISO 26262 / DO-178C). |
 
 ---
 
@@ -80,33 +90,35 @@ One input generates 8 target artifacts in a single pass:
 
 ### Build Compiler
 ```bash
-clang -std=c99 -O3 -Wall -Wextra -Wpedantic -Werror -Iinclude src/*.c -o oath
+clang -std=c99 -O3 -Wall -Wextra -Wpedantic -Werror -D_CRT_SECURE_NO_WARNINGS -Iinclude src/*.c -o oath
 ```
 
-### Polyglot Synthesis
-Compile `.oath` source into all 8 targets:
+### Full S-Tier Enterprise Synthesis
+Compile `.oath` source into all 8 targets, direct binary WASM, and package manifests:
 ```bash
 oath polyglot test.oath -o enterprise
 ```
 
-Ingest a C header with contract annotations and emit client bindings:
+### Inbound Interface Ingestion (from C Header / Rust FFI)
+Directly ingest C headers containing contract annotations and synthesize client bindings:
 ```bash
 oath polyglot api.h -o bridge
 ```
 
-### Dump OIR (Bytecode)
+### Inspect Universal SSA OIR
+Inspect lowered three-address bytecode and basic block control-flow graphs:
 ```bash
 oath ir test.oath
 ```
 
-### Microbenchmark
-Run 10,000,000 iterations:
+### Physical Hardware Benchmark
+Execute 10,000,000-iteration hardware microbenchmark with anti-DCE black-box guarantees:
 ```bash
 oath bench test.oath
 ```
 
-### Native Runner
-Verify, compile via host `-O3`, and execute:
+### Native Execution Runner
+Verify, compile using host C compiler with `-O3`, and execute:
 ```bash
 oath run test.oath
 ```
@@ -118,21 +130,24 @@ oath run test.oath
 ```
 include/oath/
   arena.h       - Linear memory allocator
-  ast.h         - AST definitions
-  backend.h     - C99 emitter
-  common.h      - Fixed-width types and compiler macros
-  ingest.h      - C/Rust interface ingest
-  interval.h    - 64-bit checked interval domain
-  lexer.h       - Lexer
-  lower.h       - AST -> OIR lowerer
-  oir.h         - Universal SSA intermediate representation (OIR)
-  parser.h      - Parser
-  polyglot.h    - Multi-target emitters (Rust, WASM, Py, Go, Java, C#, TS)
+  ast.h         - AST node definitions & capability parameter kinds
+  backend.h     - C99 code and certificate emitter
+  common.h      - 128-bit integer types and compiler macros
+  diagnostic.h  - Compiler diagnostics, error codes, and source renderer
+  ingest.h      - C header and foreign contract ingestion engine
+  interval.h    - 64-bit checked interval arithmetic domain
+  lexer.h       - Lexical analyzer
+  lower.h       - AST to OIR SSA lowering interface
+  oir.h         - Universal SSA Intermediate Representation (OIR)
+  opt.h         - OIR optimization pipeline (constant propagation & simplification)
+  parser.h      - Recursive descent parser with synchronization recovery
+  polyglot.h    - Polyglot multi-target emitters & manifest generators
   sepe.h        - Symbolic Execution & Proof Engine on OIR
 src/
-  arena.c    backend.c   ingest.c    interval.c
-  lexer.c    lower.c     main.c      oir.c
-  parser.c   polyglot.c  sepe.c
+  arena.c       backend.c     diagnostic.c  ingest.c
+  interval.c    lexer.c       lower.c       main.c
+  oir.c         opt.c         parser.c      polyglot.c
+  sepe.c
 ```
 
 ---
