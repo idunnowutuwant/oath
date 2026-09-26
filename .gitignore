@@ -1,11 +1,33 @@
-﻿# Binaries & Object files
+﻿# Compilers & Native Binaries
 *.exe
 *.o
+*.obj
+*.dll
+*.so
+*.dylib
+oath
 oath-htse
 
-# Compiler temporary runner files
+# Compiler Test & Temporary Files
 __oath_*
+repomix-output.*
 
-# OS metadata
+# Polyglot Exported Artifacts (Generated)
+*.wat
+*.wasm
+*.audit.json
+enterprise.*
+enterprise_bridge.*
+bridge.*
+netcore.*
+netring.*
+
+# IDE & Editor Configs
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS Metadata
 Thumbs.db
 .DS_Store

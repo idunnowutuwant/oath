@@ -2,6 +2,7 @@
 #define OATH_SEPE_H
 
 #include "oath/ast.h"
+#include "oath/oir.h"
 
 #define OATH_MAX_DISJOINT_INTERVALS 4
 
@@ -24,8 +25,13 @@ typedef enum {
     SEPE_ALIASING_VIOLATION,
     SEPE_RESOURCE_LEAK,
     SEPE_DOUBLE_FREE,
+    SEPE_USE_AFTER_FREE,
     SEPE_NON_EXHAUSTIVE_MATCH,
-    SEPE_ENSURES_VIOLATION
+    SEPE_ENSURES_VIOLATION,
+    SEPE_BUFFER_CAPACITY_MISMATCH,
+    SEPE_TAINTED_INDEX,
+    SEPE_TAINTED_ARGUMENT,
+    SEPE_BRANCH_RESOURCE_MISMATCH
 } SepeDiagCode;
 
 typedef struct {
@@ -33,10 +39,11 @@ typedef struct {
     SepeDiagCode diag;
     size_t total_paths_explored;
     size_t infeasible_paths_pruned;
-    char target_symbol[OATH_MAX_IDENT_LEN];
+    char target_symbol[64];
     char counter_example[256];
 } SepeReport;
 
 SepeReport oath_sepe_verify_function(const OathFunction* fn, const OathModule* mod);
+SepeReport oath_sepe_verify_oir_function(const OirFunction* fn, const OirModule* mod);
 
 #endif

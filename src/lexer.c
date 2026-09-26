@@ -64,6 +64,8 @@ OathToken oath_lexer_next(OathLexer* l) {
         else if (strcmp(tok.text, "extern") == 0) tok.type = TOK_EXTERN;
         else if (strcmp(tok.text, "struct") == 0) tok.type = TOK_STRUCT;
         else if (strcmp(tok.text, "enum") == 0) tok.type = TOK_ENUM;
+        else if (strcmp(tok.text, "resource") == 0) tok.type = TOK_RESOURCE;
+        else if (strcmp(tok.text, "tainted") == 0) tok.type = TOK_TAINTED;
         else if (strcmp(tok.text, "let") == 0) tok.type = TOK_LET;
         else if (strcmp(tok.text, "alloc") == 0) tok.type = TOK_ALLOC;
         else if (strcmp(tok.text, "free") == 0) tok.type = TOK_FREE;

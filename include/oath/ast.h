@@ -122,6 +122,7 @@ typedef enum {
     STMT_ARRAY_SET,
     STMT_FREE,
     STMT_MATCH,
+    STMT_CALL,
     STMT_IF_ELSE,
     STMT_WHILE,
     STMT_RETURN
@@ -148,6 +149,9 @@ typedef struct OathStmt {
         struct {
             size_t var_idx;
         } free_stmt;
+        struct {
+            OathExpr* expr;
+        } call_stmt;
         struct {
             size_t target_var_idx;
             size_t enum_idx;
@@ -176,7 +180,9 @@ typedef enum {
     PARAM_BUFFER,
     PARAM_SLICE,
     PARAM_STRUCT,
-    PARAM_ENUM
+    PARAM_ENUM,
+    PARAM_RESOURCE,
+    PARAM_TAINTED
 } OathParamKind;
 
 typedef struct {
@@ -203,6 +209,7 @@ typedef struct {
 typedef struct {
     char name[64];
     bool is_extern;
+    bool returns_resource;
     OathParam params[OATH_MAX_PARAMS];
     size_t param_count;
     OathLocal locals[OATH_MAX_LOCALS];

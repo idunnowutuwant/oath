@@ -4,19 +4,6 @@ struct PacketHeader {
     checksum: [0, 255]
 }
 
-enum NetStatus {
-    Accepted: [0, 1500],
-    Dropped: [0, 0]
-}
-
-fn validate_header(hdr: PacketHeader) -> [0, 1500] {
-    if hdr.magic == 21850 && hdr.checksum != 0 {
-        return hdr.len;
-    } else {
-        return 0;
-    }
-}
-
 fn sanitize_payload(pkt: [0, 255; len], len: [14, 1500], idx: [0, 1499], val: [0, 255]) -> [0, 255]
     requires idx < len
 {
@@ -24,19 +11,28 @@ fn sanitize_payload(pkt: [0, 255; len], len: [14, 1500], idx: [0, 1499], val: [0
     return pkt[idx];
 }
 
-fn dma_forward(rx: [0, 255; 8], tx: [0, 255; 8])
-    requires disjoint(rx, tx)
-    -> [0, 255]
-{
-    let i = 0;
-    while (i < 8) {
-        tx[i] = rx[i];
-        i = i + 1;
-    }
-    return tx[0];
+fn alloc_scratch(sz: [1, 1024]) -> resource {
+    let h = alloc(sz);
+    return h;
 }
 
-fn net_pipeline_benchmark() -> [0, 1500] {
+fn free_scratch(h: resource) -> [0, 0] {
+    free(h);
+    return 0;
+}
+
+fn process_incoming_packet(raw_len: tainted, pkt: [0, 255; 1500]) -> [0, 255] {
+    let h = alloc_scratch(256);
+    free_scratch(h);
+
+    if raw_len >= 14 && raw_len <= 1500 {
+        return sanitize_payload(pkt, raw_len, 0, 42);
+    } else {
+        return 0;
+    }
+}
+
+fn v2_benchmark_core() -> [0, 1500] {
     let budget = 1500;
     let step = 0;
     while (step < 8) {

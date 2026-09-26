@@ -9,6 +9,8 @@ typedef enum {
     TOK_EXTERN,
     TOK_STRUCT,
     TOK_ENUM,
+    TOK_RESOURCE,
+    TOK_TAINTED,
     TOK_LET,
     TOK_ALLOC,
     TOK_FREE,

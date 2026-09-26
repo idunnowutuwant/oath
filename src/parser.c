@@ -2,6 +2,16 @@
 #include <stdio.h>
 #include <string.h>
 
+static void safe_copy_str(char* dst, const char* src, size_t dst_cap) {
+    if (dst_cap == 0) return;
+    size_t i = 0;
+    while (i + 1 < dst_cap && src[i] != '\0') {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+}
+
 static void next_token(OathParser* p) {
     p->current = oath_lexer_next(&p->lexer);
 }
@@ -111,7 +121,7 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
 
     if (p->current.type == TOK_IDENT) {
         char ident_name[64];
-        strncpy(ident_name, p->current.text, sizeof(ident_name) - 1);
+        safe_copy_str(ident_name, p->current.text, sizeof(ident_name));
         next_token(p);
 
         if (match_token(p, TOK_COLON_COLON)) {
@@ -120,7 +130,7 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
                 return NULL;
             }
             char var_name[64];
-            strncpy(var_name, p->current.text, sizeof(var_name) - 1);
+            safe_copy_str(var_name, p->current.text, sizeof(var_name));
             next_token(p);
 
             size_t e_idx = (size_t)-1;
@@ -157,7 +167,7 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
 
         if (match_token(p, TOK_LPAREN)) {
             e->type = EXPR_CALL;
-            strncpy(e->call_name, ident_name, sizeof(e->call_name) - 1);
+            safe_copy_str(e->call_name, ident_name, sizeof(e->call_name));
             e->arg_count = 0;
             while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
                 if (e->arg_count >= OATH_MAX_PARAMS) {
@@ -194,7 +204,7 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
                 e->type = EXPR_FIELD;
                 e->var_idx = idx;
                 e->field_idx = f_idx;
-                strncpy(e->field_name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+                safe_copy_str(e->field_name, p->current.text, sizeof(e->field_name));
                 next_token(p);
                 return e;
             }
@@ -433,7 +443,7 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
             }
 
             size_t l_idx = fn->local_count++;
-            strncpy(fn->locals[l_idx].name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+            safe_copy_str(fn->locals[l_idx].name, p->current.text, sizeof(fn->locals[l_idx].name));
             next_token(p);
             if (!expect_token(p, TOK_RPAREN, "')'")) return NULL;
             if (!expect_token(p, TOK_FAT_ARROW, "'=>'")) return NULL;
@@ -466,7 +476,7 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         }
 
         size_t l_idx = fn->local_count++;
-        strncpy(fn->locals[l_idx].name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+        safe_copy_str(fn->locals[l_idx].name, p->current.text, sizeof(fn->locals[l_idx].name));
         next_token(p);
 
         if (!expect_token(p, TOK_ASSIGN, "'='")) return NULL;
@@ -518,8 +528,32 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
 
     if (p->current.type == TOK_IDENT) {
         char ident_name[64];
-        strncpy(ident_name, p->current.text, sizeof(ident_name) - 1);
+        safe_copy_str(ident_name, p->current.text, sizeof(ident_name));
         next_token(p);
+
+        if (match_token(p, TOK_LPAREN)) {
+            OathExpr* call_e = (OathExpr*)oath_arena_alloc(p->arena, sizeof(OathExpr));
+            call_e->type = EXPR_CALL;
+            safe_copy_str(call_e->call_name, ident_name, sizeof(call_e->call_name));
+            call_e->arg_count = 0;
+            while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
+                if (call_e->arg_count >= OATH_MAX_PARAMS) {
+                    p->has_error = true;
+                    snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max call arguments");
+                    return NULL;
+                }
+                call_e->args[call_e->arg_count++] = parse_expr(p, fn, mod);
+                if (!match_token(p, TOK_COMMA)) break;
+            }
+            if (!expect_token(p, TOK_RPAREN, "')'")) return NULL;
+            if (!expect_token(p, TOK_SEMI, "';'")) return NULL;
+
+            OathStmt* s = (OathStmt*)oath_arena_alloc(p->arena, sizeof(OathStmt));
+            s->type = STMT_CALL;
+            s->next = NULL;
+            s->as.call_stmt.expr = call_e;
+            return s;
+        }
 
         size_t v_idx = resolve_variable(fn, ident_name);
         if (v_idx == (size_t)-1) {
@@ -639,7 +673,7 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
     }
 
     p->has_error = true;
-    snprintf(p->error_msg, sizeof(p->error_msg), "Expected statement (let, return, if, while, match, assignment, free)");
+    snprintf(p->error_msg, sizeof(p->error_msg), "Expected statement (let, return, if, while, match, assignment, free, call)");
     return NULL;
 }
 
@@ -687,7 +721,7 @@ static void parse_struct_decl(OathParser* p, OathModule* mod) {
         expect_token(p, TOK_IDENT, "struct name");
         return;
     }
-    strncpy(s->name, p->current.text, sizeof(s->name) - 1);
+    safe_copy_str(s->name, p->current.text, sizeof(s->name));
     next_token(p);
 
     if (!expect_token(p, TOK_LBRACE, "'{'")) return;
@@ -702,7 +736,7 @@ static void parse_struct_decl(OathParser* p, OathModule* mod) {
             expect_token(p, TOK_IDENT, "field name");
             return;
         }
-        strncpy(s->fields[s->field_count].name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+        safe_copy_str(s->fields[s->field_count].name, p->current.text, sizeof(s->fields[s->field_count].name));
         next_token(p);
 
         if (!expect_token(p, TOK_COLON, "':'")) return;
@@ -731,7 +765,7 @@ static void parse_enum_decl(OathParser* p, OathModule* mod) {
         expect_token(p, TOK_IDENT, "enum name");
         return;
     }
-    strncpy(ed->name, p->current.text, sizeof(ed->name) - 1);
+    safe_copy_str(ed->name, p->current.text, sizeof(ed->name));
     next_token(p);
 
     if (!expect_token(p, TOK_LBRACE, "'{'")) return;
@@ -746,7 +780,7 @@ static void parse_enum_decl(OathParser* p, OathModule* mod) {
             expect_token(p, TOK_IDENT, "variant name");
             return;
         }
-        strncpy(ed->variants[ed->variant_count].name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+        safe_copy_str(ed->variants[ed->variant_count].name, p->current.text, sizeof(ed->variants[ed->variant_count].name));
         next_token(p);
 
         if (!expect_token(p, TOK_COLON, "':'")) return;
@@ -847,7 +881,7 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
         expect_token(p, TOK_IDENT, "function name");
         return fn;
     }
-    strncpy(fn.name, p->current.text, sizeof(fn.name) - 1);
+    safe_copy_str(fn.name, p->current.text, sizeof(fn.name));
     next_token(p);
 
     if (!expect_token(p, TOK_LPAREN, "'('")) return fn;
@@ -863,7 +897,7 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
             expect_token(p, TOK_IDENT, "parameter name");
             return fn;
         }
-        strncpy(fn.params[fn.param_count].name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+        safe_copy_str(fn.params[fn.param_count].name, p->current.text, sizeof(fn.params[fn.param_count].name));
         next_token(p);
 
         if (!expect_token(p, TOK_COLON, "':'")) return fn;
@@ -892,6 +926,12 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
             fn.params[fn.param_count].kind = PARAM_ENUM;
             fn.params[fn.param_count].enum_def_idx = e_idx;
             next_token(p);
+        } else if (match_token(p, TOK_RESOURCE)) {
+            fn.params[fn.param_count].kind = PARAM_RESOURCE;
+            fn.params[fn.param_count].scalar_bounds = oath_interval_create(1, INT64_MAX);
+        } else if (match_token(p, TOK_TAINTED)) {
+            fn.params[fn.param_count].kind = PARAM_TAINTED;
+            fn.params[fn.param_count].scalar_bounds = oath_interval_create(INT64_MIN, INT64_MAX);
         } else {
             OathInterval iv = parse_interval_bounds(p);
 
@@ -903,7 +943,7 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
                     next_token(p);
                 } else if (p->current.type == TOK_IDENT) {
                     fn.params[fn.param_count].kind = PARAM_SLICE;
-                    strncpy(fn.params[fn.param_count].slice.len_param_name, p->current.text, OATH_MAX_IDENT_LEN - 1);
+                    safe_copy_str(fn.params[fn.param_count].slice.len_param_name, p->current.text, sizeof(fn.params[fn.param_count].slice.len_param_name));
                     fn.params[fn.param_count].slice.elem_bounds = iv;
                     next_token(p);
                 } else {
@@ -956,9 +996,14 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
 
     if (!expect_token(p, TOK_ARROW, "'->'")) return fn;
 
-    OathInterval post = parse_interval_bounds(p);
-    if (!expect_token(p, TOK_RBRACKET, "']'")) return fn;
-    fn.postcondition = post;
+    if (match_token(p, TOK_RESOURCE)) {
+        fn.returns_resource = true;
+        fn.postcondition = oath_interval_create(1, INT64_MAX);
+    } else {
+        OathInterval post = parse_interval_bounds(p);
+        if (!expect_token(p, TOK_RBRACKET, "']'")) return fn;
+        fn.postcondition = post;
+    }
 
     while (p->current.type == TOK_REQUIRES || p->current.type == TOK_ENSURES) {
         if (match_token(p, TOK_REQUIRES)) {
