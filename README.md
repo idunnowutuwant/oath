@@ -1,4 +1,4 @@
-﻿![OATH](banner.svg) 
+﻿![OATH](banner.svg?v=3) 
 
 # OATH v3
 
