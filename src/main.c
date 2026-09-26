@@ -1,8 +1,13 @@
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "oath/arena.h"
 #include "oath/parser.h"
 #include "oath/sepe.h"
 #include "oath/backend.h"
 #include "oath/lower.h"
+#include "oath/opt.h"
 #include "oath/polyglot.h"
 #include "oath/ingest.h"
 #include "oath/diagnostic.h"
@@ -51,7 +56,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Usage:\n");
         fprintf(stderr, "  oath <source.oath|file.h|lib.rs>         : Verify and output C99\n");
         fprintf(stderr, "  oath ir <source.oath|file.h|lib.rs>      : Dump Universal SSA OIR\n");
-        fprintf(stderr, "  oath polyglot <input> -o <prefix>        : Emit Rust, WASM, Py, Go, Java, C#, TS\n");
+        fprintf(stderr, "  oath polyglot <input> -o <prefix>        : Emit 8 Targets + Manifests\n");
         fprintf(stderr, "  oath run <source.oath>                   : Verify and execute native binary\n");
         fprintf(stderr, "  oath bench <source.oath>                 : Measure hardware benchmark\n");
         fprintf(stderr, "  oath lib <source.oath> -o <prefix>       : Export .h, .c, and .audit.json\n");
@@ -116,7 +121,7 @@ int main(int argc, char** argv) {
     memset(&mod, 0, sizeof(mod));
 
     if (is_foreign) {
-        printf("[INBOUND v3] Successfully ingested foreign interface from '%s' (%zu functions)\n",
+        printf("[INBOUND v5] Ingested foreign interface from '%s' (%zu functions)\n",
                filepath, oir_mod.function_count);
     } else {
         OathDiagContext diag;
@@ -133,6 +138,7 @@ int main(int argc, char** argv) {
         }
 
         oir_mod = oath_lower_ast_to_oir(&mod, &arena);
+        oir_optimize_module(&oir_mod);
 
         bool all_valid = true;
         for (size_t i = 0; i < oir_mod.function_count; ++i) {
@@ -318,9 +324,13 @@ int main(int argc, char** argv) {
     if (dump_ir) {
         oir_dump_module(stdout, &oir_mod);
     } else if (emit_polyglot) {
-        char rs_file[256], wasm_file[256], py_file[256], go_file[256], java_file[256], cs_file[256], ts_file[256], json_file[256];
+        char rs_file[256], wasm_file[256], wasm_bin[256], py_file[256], go_file[256];
+        char java_file[256], cs_file[256], ts_file[256], json_file[256];
+        char cargo_file[256], npm_file[256], gmod_file[256], csproj_file[256];
+
         snprintf(rs_file, sizeof(rs_file), "%s.rs", lib_prefix);
         snprintf(wasm_file, sizeof(wasm_file), "%s.wat", lib_prefix);
+        snprintf(wasm_bin, sizeof(wasm_bin), "%s.wasm", lib_prefix);
         snprintf(py_file, sizeof(py_file), "%s.py", lib_prefix);
         snprintf(go_file, sizeof(go_file), "%s.go", lib_prefix);
         snprintf(java_file, sizeof(java_file), "%s.java", lib_prefix);
@@ -328,11 +338,18 @@ int main(int argc, char** argv) {
         snprintf(ts_file, sizeof(ts_file), "%s.ts", lib_prefix);
         snprintf(json_file, sizeof(json_file), "%s.audit.json", lib_prefix);
 
+        snprintf(cargo_file, sizeof(cargo_file), "Cargo.toml");
+        snprintf(npm_file, sizeof(npm_file), "package.json");
+        snprintf(gmod_file, sizeof(gmod_file), "go.mod");
+        snprintf(csproj_file, sizeof(csproj_file), "%s.csproj", lib_prefix);
+
         FILE* f_rs = fopen(rs_file, "w");
         if (f_rs) { oath_emit_rust_module(f_rs, &oir_mod); fclose(f_rs); }
 
         FILE* f_wat = fopen(wasm_file, "w");
         if (f_wat) { oath_emit_wasm_wat(f_wat, &oir_mod); fclose(f_wat); }
+
+        oath_emit_wasm_binary(wasm_bin, &oir_mod);
 
         FILE* f_py = fopen(py_file, "w");
         if (f_py) { oath_emit_python_wrapper(f_py, &oir_mod, lib_prefix); fclose(f_py); }
@@ -349,6 +366,18 @@ int main(int argc, char** argv) {
         FILE* f_ts = fopen(ts_file, "w");
         if (f_ts) { oath_emit_typescript_wrapper(f_ts, &oir_mod, lib_prefix); fclose(f_ts); }
 
+        FILE* f_cargo = fopen(cargo_file, "w");
+        if (f_cargo) { oath_emit_cargo_manifest(f_cargo, lib_prefix); fclose(f_cargo); }
+
+        FILE* f_npm = fopen(npm_file, "w");
+        if (f_npm) { oath_emit_package_json(f_npm, lib_prefix); fclose(f_npm); }
+
+        FILE* f_gmod = fopen(gmod_file, "w");
+        if (f_gmod) { oath_emit_go_mod(f_gmod, lib_prefix); fclose(f_gmod); }
+
+        FILE* f_cspr = fopen(csproj_file, "w");
+        if (f_cspr) { oath_emit_csproj(f_cspr, lib_prefix); fclose(f_cspr); }
+
         FILE* f_json = fopen(json_file, "w");
         if (f_json) {
             fprintf(f_json, "[\n");
@@ -361,15 +390,15 @@ int main(int argc, char** argv) {
             fclose(f_json);
         }
 
-        printf("\n[POLYGLOT v3 EXPORT COMPLETED]\n");
-        printf("  - Rust       : %s\n", rs_file);
-        printf("  - WASM (WAT) : %s\n", wasm_file);
-        printf("  - Python     : %s\n", py_file);
-        printf("  - Go         : %s\n", go_file);
-        printf("  - Java (JNI) : %s\n", java_file);
-        printf("  - C# (.NET)  : %s\n", cs_file);
-        printf("  - TypeScript : %s\n", ts_file);
-        printf("  - Audit Cert : %s\n", json_file);
+        printf("\n[S-TIER v5 ENTERPRISE SYNTHESIS COMPLETED]\n");
+        printf("  - Native Binary WASM : %s\n", wasm_bin);
+        printf("  - Standalone Rust    : %s (with %s)\n", rs_file, cargo_file);
+        printf("  - TypeScript/Web     : %s (with %s)\n", ts_file, npm_file);
+        printf("  - Go Package         : %s (with %s)\n", go_file, gmod_file);
+        printf("  - C# .NET Enterprise : %s (with %s)\n", cs_file, csproj_file);
+        printf("  - Java JNI           : %s\n", java_file);
+        printf("  - Python FFI         : %s\n", py_file);
+        printf("  - Formal Audit Cert  : %s\n", json_file);
     } else {
         printf("\n");
         if (!is_foreign) {
