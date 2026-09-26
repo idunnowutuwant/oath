@@ -43,6 +43,10 @@ void oath_emit_rust_module(FILE* out, const OirModule* mod) {
             for (size_t p = 0; p < fn->param_count; ++p) {
                 if (fn->params[p].kind == PARAM_BUFFER || fn->params[p].kind == PARAM_SLICE) {
                     fprintf(out, "%s: *mut i64", fn->params[p].name);
+                } else if (fn->params[p].kind == PARAM_BORROW_IMMUT) {
+                    fprintf(out, "%s: &i64", fn->params[p].name);
+                } else if (fn->params[p].kind == PARAM_BORROW_MUT) {
+                    fprintf(out, "%s: &mut i64", fn->params[p].name);
                 } else {
                     fprintf(out, "%s: i64", fn->params[p].name);
                 }
@@ -63,6 +67,10 @@ void oath_emit_rust_module(FILE* out, const OirModule* mod) {
             for (size_t p = 0; p < fn->param_count; ++p) {
                 if (fn->params[p].kind == PARAM_BUFFER || fn->params[p].kind == PARAM_SLICE) {
                     fprintf(out, "%s: *mut i64", fn->params[p].name);
+                } else if (fn->params[p].kind == PARAM_BORROW_IMMUT) {
+                    fprintf(out, "%s: &i64", fn->params[p].name);
+                } else if (fn->params[p].kind == PARAM_BORROW_MUT) {
+                    fprintf(out, "%s: &mut i64", fn->params[p].name);
                 } else {
                     fprintf(out, "%s: i64", fn->params[p].name);
                 }
@@ -84,6 +92,10 @@ void oath_emit_rust_module(FILE* out, const OirModule* mod) {
         for (size_t p = 0; p < fn->param_count; ++p) {
             if (fn->params[p].kind == PARAM_BUFFER || fn->params[p].kind == PARAM_SLICE) {
                 fprintf(out, "p%zu: *mut i64", p);
+            } else if (fn->params[p].kind == PARAM_BORROW_IMMUT) {
+                fprintf(out, "p%zu: &i64", p);
+            } else if (fn->params[p].kind == PARAM_BORROW_MUT) {
+                fprintf(out, "p%zu: &mut i64", p);
             } else {
                 fprintf(out, "p%zu: i64", p);
             }

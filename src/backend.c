@@ -212,6 +212,10 @@ static void emit_param_type_c(FILE* stream, const OathFunction* fn, size_t p, co
         } else {
             fprintf(stream, "int64_t* %s", param->name);
         }
+    } else if (param->kind == PARAM_BORROW_IMMUT) {
+        fprintf(stream, "const int64_t* %s", param->name);
+    } else if (param->kind == PARAM_BORROW_MUT) {
+        fprintf(stream, "int64_t* restrict %s", param->name);
     } else {
         fprintf(stream, "int64_t %s", param->name);
     }
@@ -359,7 +363,8 @@ void oath_emit_b2b_certificate(FILE* stream, const OathFunction* fn, const SepeR
         "BUFFER_CAPACITY_MISMATCH",
         "TAINTED_INDEX",
         "TAINTED_ARGUMENT",
-        "BRANCH_RESOURCE_MISMATCH"
+        "BRANCH_RESOURCE_MISMATCH",
+        "BORROW_CONFLICT"
     };
 
     fprintf(stream, "{\n");

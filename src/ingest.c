@@ -100,6 +100,9 @@ static OathInterval scanner_parse_bounds_comment(IngestScanner* s) {
 }
 
 static bool parse_c_function_decl(IngestScanner* s, OirModule* mod) {
+    bool is_const_ret = scanner_match_token(s, "const");
+    (void)is_const_ret;
+
     char type_name[64];
     if (!scanner_read_ident(s, type_name, sizeof(type_name))) return false;
 
@@ -113,6 +116,7 @@ static bool parse_c_function_decl(IngestScanner* s, OirModule* mod) {
     fn->postcondition = oath_interval_create(0, INT64_MAX);
 
     while (s->cursor < s->len && scanner_peek(s) != ')') {
+        bool is_const_param = scanner_match_token(s, "const");
         char param_type[64];
         if (!scanner_read_ident(s, param_type, sizeof(param_type))) break;
 
@@ -123,6 +127,8 @@ static bool parse_c_function_decl(IngestScanner* s, OirModule* mod) {
             scanner_advance(s);
         }
 
+        bool is_restrict = scanner_match_token(s, "restrict");
+
         char param_name[64];
         if (!scanner_read_ident(s, param_name, sizeof(param_name))) break;
 
@@ -131,7 +137,13 @@ static bool parse_c_function_decl(IngestScanner* s, OirModule* mod) {
         size_t p_idx = fn->param_count++;
         snprintf(fn->params[p_idx].name, sizeof(fn->params[p_idx].name), "%s", param_name);
         if (is_ptr) {
-            fn->params[p_idx].kind = PARAM_SLICE;
+            if (is_const_param) {
+                fn->params[p_idx].kind = PARAM_BORROW_IMMUT;
+            } else if (is_restrict) {
+                fn->params[p_idx].kind = PARAM_BORROW_MUT;
+            } else {
+                fn->params[p_idx].kind = PARAM_SLICE;
+            }
             fn->params[p_idx].slice.elem_bounds = bounds;
         } else {
             fn->params[p_idx].kind = PARAM_SCALAR;
@@ -174,10 +186,17 @@ static bool parse_rust_function_decl(IngestScanner* s, OirModule* mod) {
 
         if (!scanner_match_token(s, ":")) break;
 
-        bool is_ptr = false;
+        bool is_mut_borrow = false;
+        bool is_immut_borrow = false;
+        bool is_raw_ptr = false;
+
         scanner_skip_ws(s);
-        if (scanner_match_token(s, "*mut") || scanner_match_token(s, "*const")) {
-            is_ptr = true;
+        if (scanner_match_token(s, "&mut")) {
+            is_mut_borrow = true;
+        } else if (scanner_match_token(s, "&")) {
+            is_immut_borrow = true;
+        } else if (scanner_match_token(s, "*mut") || scanner_match_token(s, "*const")) {
+            is_raw_ptr = true;
         }
 
         char param_type[64];
@@ -187,7 +206,13 @@ static bool parse_rust_function_decl(IngestScanner* s, OirModule* mod) {
 
         size_t p_idx = fn->param_count++;
         snprintf(fn->params[p_idx].name, sizeof(fn->params[p_idx].name), "%s", param_name);
-        if (is_ptr) {
+        if (is_mut_borrow) {
+            fn->params[p_idx].kind = PARAM_BORROW_MUT;
+            fn->params[p_idx].slice.elem_bounds = bounds;
+        } else if (is_immut_borrow) {
+            fn->params[p_idx].kind = PARAM_BORROW_IMMUT;
+            fn->params[p_idx].slice.elem_bounds = bounds;
+        } else if (is_raw_ptr) {
             fn->params[p_idx].kind = PARAM_SLICE;
             fn->params[p_idx].slice.elem_bounds = bounds;
         } else {

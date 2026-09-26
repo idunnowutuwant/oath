@@ -182,7 +182,9 @@ typedef enum {
     PARAM_STRUCT,
     PARAM_ENUM,
     PARAM_RESOURCE,
-    PARAM_TAINTED
+    PARAM_TAINTED,
+    PARAM_BORROW_IMMUT,
+    PARAM_BORROW_MUT
 } OathParamKind;
 
 typedef struct {

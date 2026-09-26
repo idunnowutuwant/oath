@@ -27,13 +27,38 @@ static bool match_token(OathParser* p, OathTokenType type) {
 static bool expect_token(OathParser* p, OathTokenType type, const char* expected_desc) {
     if (p->current.type != type) {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg),
-                 "Line %zu, Col %zu: Expected %s, got '%s'",
-                 p->current.line, p->current.col, expected_desc, p->current.text);
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                             "Expected %s, found '%s'", expected_desc, p->current.text);
+        }
         return false;
     }
     next_token(p);
     return true;
+}
+
+static void synchronize(OathParser* p) {
+    p->has_error = false;
+    while (p->current.type != TOK_EOF) {
+        if (p->current.type == TOK_SEMI) {
+            next_token(p);
+            return;
+        }
+        switch (p->current.type) {
+            case TOK_FN:
+            case TOK_STRUCT:
+            case TOK_ENUM:
+            case TOK_LET:
+            case TOK_IF:
+            case TOK_WHILE:
+            case TOK_RETURN:
+            case TOK_MATCH:
+                return;
+            default:
+                break;
+        }
+        next_token(p);
+    }
 }
 
 static OathInterval parse_interval_bounds(OathParser* p) {
@@ -150,7 +175,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
 
             if (e_idx == (size_t)-1 || v_idx == (size_t)-1) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Unknown enum variant '%s::%s'", ident_name, var_name);
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                     "Unknown enum variant '%s::%s'", ident_name, var_name);
+                }
                 return NULL;
             }
 
@@ -172,7 +200,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
             while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
                 if (e->arg_count >= OATH_MAX_PARAMS) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max call arguments");
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                         "Exceeded maximum argument limit (%d)", OATH_MAX_PARAMS);
+                    }
                     return NULL;
                 }
                 e->args[e->arg_count++] = parse_expr(p, fn, mod);
@@ -187,7 +218,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
             if (match_token(p, TOK_DOT)) {
                 if (idx >= fn->param_count || fn->params[idx].kind != PARAM_STRUCT) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: '%s' is not a struct", p->current.line, ident_name);
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_TYPE_MISMATCH, p->current.line, p->current.col,
+                                         "Cannot access field on non-struct variable '%s'", ident_name);
+                    }
                     return NULL;
                 }
                 if (p->current.type != TOK_IDENT) {
@@ -198,7 +232,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
                 size_t f_idx = resolve_field(s, p->current.text);
                 if (f_idx == (size_t)-1) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: Unknown field '%s'", p->current.line, p->current.text);
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                         "Unknown struct field '%s'", p->current.text);
+                    }
                     return NULL;
                 }
                 e->type = EXPR_FIELD;
@@ -227,7 +264,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
         }
 
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: Unknown identifier '%s'", p->current.line, ident_name);
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                             "Unknown identifier '%s'", ident_name);
+        }
         return NULL;
     }
 
@@ -238,7 +278,10 @@ static OathExpr* parse_primary(OathParser* p, const OathFunction* fn, const Oath
     }
 
     p->has_error = true;
-    snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: Unexpected token in expression", p->current.line);
+    if (p->diag) {
+        oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                         "Unexpected token in expression: '%s'", p->current.text);
+    }
     return NULL;
 }
 
@@ -286,7 +329,10 @@ static size_t resolve_target_slot(OathParser* p, const OathFunction* fn, const O
     if (match_token(p, TOK_DOT)) {
         if (v_idx >= fn->param_count || fn->params[v_idx].kind != PARAM_STRUCT) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Cannot access field on non-struct variable");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_TYPE_MISMATCH, p->current.line, p->current.col,
+                                 "Cannot access field on non-struct variable");
+            }
             return (size_t)-1;
         }
         if (p->current.type != TOK_IDENT) {
@@ -297,7 +343,10 @@ static size_t resolve_target_slot(OathParser* p, const OathFunction* fn, const O
         size_t f_idx = resolve_field(s, p->current.text);
         if (f_idx == (size_t)-1) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Unknown field '%s'", p->current.text);
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                 "Unknown field '%s'", p->current.text);
+            }
             return (size_t)-1;
         }
         next_token(p);
@@ -318,7 +367,10 @@ static OathAtomicCond parse_atomic_condition(OathParser* p, const OathFunction* 
     size_t u = resolve_variable(fn, p->current.text);
     if (u == (size_t)-1) {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Unknown variable '%s' in condition", p->current.text);
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                             "Unknown variable '%s' in condition", p->current.text);
+        }
         return cond;
     }
     next_token(p);
@@ -334,7 +386,10 @@ static OathAtomicCond parse_atomic_condition(OathParser* p, const OathFunction* 
     else if (match_token(p, TOK_GE)) cond.op = COND_GE;
     else {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Expected comparison operator");
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                             "Expected comparison operator in condition");
+        }
         return cond;
     }
 
@@ -342,7 +397,10 @@ static OathAtomicCond parse_atomic_condition(OathParser* p, const OathFunction* 
         size_t v = resolve_variable(fn, p->current.text);
         if (v == (size_t)-1) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Unknown RHS variable '%s'", p->current.text);
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                 "Unknown RHS variable '%s'", p->current.text);
+            }
             return cond;
         }
         next_token(p);
@@ -374,7 +432,10 @@ static OathCondition parse_condition(OathParser* p, const OathFunction* fn, cons
     while (match_token(p, TOK_AND)) {
         if (cond.count >= OATH_MAX_CONJUNCTS) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max '&&' conjuncts");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                 "Exceeded max conjunct limit (%d)", OATH_MAX_CONJUNCTS);
+            }
             return cond;
         }
         cond.terms[cond.count++] = parse_atomic_condition(p, fn, mod);
@@ -394,7 +455,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         size_t v_idx = resolve_variable(fn, p->current.text);
         if (v_idx == (size_t)-1 || v_idx >= fn->param_count || fn->params[v_idx].kind != PARAM_ENUM) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: Target '%s' is not an enum parameter", p->current.line, p->current.text);
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_TYPE_MISMATCH, p->current.line, p->current.col,
+                                 "Match target '%s' must be an enum parameter", p->current.text);
+            }
             return NULL;
         }
         size_t e_idx = fn->params[v_idx].enum_def_idx;
@@ -413,7 +477,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF && !p->has_error) {
             if (s->as.match_stmt.arm_count >= OATH_MAX_MATCH_ARMS) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max match arms");
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                     "Exceeded max match arm limit (%d)", OATH_MAX_MATCH_ARMS);
+                }
                 return NULL;
             }
 
@@ -431,7 +498,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
             }
             if (var_idx == (size_t)-1) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Unknown variant '%s' in match for enum '%s'", p->current.text, ed->name);
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                     "Unknown variant '%s' for enum '%s'", p->current.text, ed->name);
+                }
                 return NULL;
             }
             next_token(p);
@@ -471,7 +541,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
 
         if (fn->local_count >= OATH_MAX_LOCALS) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max local variables");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                 "Exceeded max local variable limit (%d)", OATH_MAX_LOCALS);
+            }
             return NULL;
         }
 
@@ -503,7 +576,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         size_t v_idx = resolve_variable(fn, p->current.text);
         if (v_idx == (size_t)-1) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Unknown variable '%s' in free", p->current.text);
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                 "Unknown variable '%s' in free", p->current.text);
+            }
             return NULL;
         }
         next_token(p);
@@ -539,7 +615,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
             while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
                 if (call_e->arg_count >= OATH_MAX_PARAMS) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max call arguments");
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                         "Exceeded max call arguments");
+                    }
                     return NULL;
                 }
                 call_e->args[call_e->arg_count++] = parse_expr(p, fn, mod);
@@ -558,7 +637,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         size_t v_idx = resolve_variable(fn, ident_name);
         if (v_idx == (size_t)-1) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Line %zu: Unknown variable '%s'", p->current.line, ident_name);
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                 "Unknown variable '%s'", ident_name);
+            }
             return NULL;
         }
 
@@ -591,8 +673,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
         }
 
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg),
-                 "Line %zu: Unexpected identifier '%s' at statement position", p->current.line, ident_name);
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                             "Unexpected identifier '%s' at statement position", ident_name);
+        }
         return NULL;
     }
 
@@ -635,7 +719,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
             while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
                 if (s->as.while_loop.invariant_count >= OATH_MAX_INVARIANTS) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max loop invariants");
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                         "Exceeded max loop invariant limit (%d)", OATH_MAX_INVARIANTS);
+                    }
                     return NULL;
                 }
 
@@ -646,7 +733,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
                 size_t inv_v = resolve_variable(fn, p->current.text);
                 if (inv_v == (size_t)-1) {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Unknown variable '%s' in invariant", p->current.text);
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                         "Unknown variable '%s' in invariant", p->current.text);
+                    }
                     return NULL;
                 }
                 next_token(p);
@@ -673,7 +763,10 @@ static OathStmt* parse_statement_single(OathParser* p, OathFunction* fn, const O
     }
 
     p->has_error = true;
-    snprintf(p->error_msg, sizeof(p->error_msg), "Expected statement (let, return, if, while, match, assignment, free, call)");
+    if (p->diag) {
+        oath_diag_report(p->diag, DIAG_ERR_EXPECTED_STATEMENT, p->current.line, p->current.col,
+                         "Expected statement, found '%s'", p->current.text);
+    }
     return NULL;
 }
 
@@ -681,9 +774,12 @@ static OathStmt* parse_statement_list(OathParser* p, OathFunction* fn, const Oat
     OathStmt* head = NULL;
     OathStmt* tail = NULL;
 
-    while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF && !p->has_error) {
+    while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF) {
         OathStmt* s = parse_statement_single(p, fn, mod);
-        if (!s) return NULL;
+        if (!s) {
+            synchronize(p);
+            continue;
+        }
 
         if (!head) {
             head = s;
@@ -696,10 +792,11 @@ static OathStmt* parse_statement_list(OathParser* p, OathFunction* fn, const Oat
     return head;
 }
 
-OathParser oath_parser_create(const char* src, OathArena* arena) {
+OathParser oath_parser_create(const char* src, OathArena* arena, OathDiagContext* diag) {
     OathParser p;
     p.lexer = oath_lexer_create(src);
     p.arena = arena;
+    p.diag = diag;
     p.has_error = false;
     p.error_msg[0] = '\0';
     next_token(&p);
@@ -709,7 +806,10 @@ OathParser oath_parser_create(const char* src, OathArena* arena) {
 static void parse_struct_decl(OathParser* p, OathModule* mod) {
     if (mod->struct_count >= OATH_MAX_STRUCTS) {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max struct declarations");
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                             "Exceeded max struct declarations");
+        }
         return;
     }
     OathStructDef* s = &mod->structs[mod->struct_count++];
@@ -729,7 +829,10 @@ static void parse_struct_decl(OathParser* p, OathModule* mod) {
     while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF) {
         if (s->field_count >= OATH_MAX_FIELDS) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max fields in struct");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                 "Exceeded max fields in struct");
+            }
             return;
         }
         if (p->current.type != TOK_IDENT) {
@@ -753,7 +856,10 @@ static void parse_struct_decl(OathParser* p, OathModule* mod) {
 static void parse_enum_decl(OathParser* p, OathModule* mod) {
     if (mod->enum_count >= OATH_MAX_ENUMS) {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max enum declarations");
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                             "Exceeded max enum declarations");
+        }
         return;
     }
     OathEnumDef* ed = &mod->enums[mod->enum_count++];
@@ -773,7 +879,10 @@ static void parse_enum_decl(OathParser* p, OathModule* mod) {
     while (p->current.type != TOK_RBRACE && p->current.type != TOK_EOF) {
         if (ed->variant_count >= OATH_MAX_VARIANTS) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max variants in enum");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                 "Exceeded max variants in enum");
+            }
             return;
         }
         if (p->current.type != TOK_IDENT) {
@@ -828,7 +937,10 @@ static void parse_ensures_clause(OathParser* p, OathFunction* fn, const OathModu
     (void)mod;
     if (fn->ensures_count >= OATH_MAX_CONTRACTS) {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max 'ensures' clauses");
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                             "Exceeded max 'ensures' clauses");
+        }
         return;
     }
 
@@ -852,7 +964,10 @@ static void parse_ensures_clause(OathParser* p, OathFunction* fn, const OathModu
     else if (match_token(p, TOK_GE)) cond.terms[0].op = COND_GE;
     else {
         p->has_error = true;
-        snprintf(p->error_msg, sizeof(p->error_msg), "Expected comparison operator after 'return'");
+        if (p->diag) {
+            oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                             "Expected comparison operator after 'return'");
+        }
         return;
     }
 
@@ -889,7 +1004,10 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
     while (p->current.type != TOK_RPAREN && p->current.type != TOK_EOF) {
         if (fn.param_count >= OATH_MAX_PARAMS) {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max param count");
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                 "Exceeded max param count");
+            }
             return fn;
         }
 
@@ -948,7 +1066,10 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
                     next_token(p);
                 } else {
                     p->has_error = true;
-                    snprintf(p->error_msg, sizeof(p->error_msg), "Expected buffer capacity or dynamic length parameter name");
+                    if (p->diag) {
+                        oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                                         "Expected buffer capacity or dynamic length parameter name");
+                    }
                     return fn;
                 }
                 if (!expect_token(p, TOK_RBRACKET, "']'")) return fn;
@@ -976,8 +1097,11 @@ static OathFunction parse_function_internal(OathParser* p, const OathModule* mod
             }
             if (len_p == (size_t)-1) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Unknown length parameter '%s' for slice '%s'",
-                         fn.params[i].slice.len_param_name, fn.params[i].name);
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_UNKNOWN_IDENTIFIER, p->current.line, p->current.col,
+                                     "Unknown length parameter '%s' for slice '%s'",
+                                     fn.params[i].slice.len_param_name, fn.params[i].name);
+                }
                 return fn;
             }
             fn.params[i].slice.len_param_idx = len_p;
@@ -1031,7 +1155,7 @@ OathModule oath_parser_parse_module(OathParser* p) {
     OathModule mod;
     memset(&mod, 0, sizeof(mod));
 
-    while (p->current.type != TOK_EOF && !p->has_error) {
+    while (p->current.type != TOK_EOF) {
         if (p->current.type == TOK_STRUCT) {
             parse_struct_decl(p, &mod);
         } else if (p->current.type == TOK_ENUM) {
@@ -1039,21 +1163,30 @@ OathModule oath_parser_parse_module(OathParser* p) {
         } else if (match_token(p, TOK_EXTERN)) {
             if (mod.function_count >= OATH_MAX_FUNCTIONS) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max function count");
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                     "Exceeded max function count (%d)", OATH_MAX_FUNCTIONS);
+                }
                 break;
             }
             mod.functions[mod.function_count++] = parse_function_internal(p, &mod, true);
         } else if (p->current.type == TOK_FN) {
             if (mod.function_count >= OATH_MAX_FUNCTIONS) {
                 p->has_error = true;
-                snprintf(p->error_msg, sizeof(p->error_msg), "Exceeded max function count");
+                if (p->diag) {
+                    oath_diag_report(p->diag, DIAG_ERR_MAX_LIMIT_EXCEEDED, p->current.line, p->current.col,
+                                     "Exceeded max function count (%d)", OATH_MAX_FUNCTIONS);
+                }
                 break;
             }
             mod.functions[mod.function_count++] = parse_function_internal(p, &mod, false);
         } else {
             p->has_error = true;
-            snprintf(p->error_msg, sizeof(p->error_msg), "Expected 'struct', 'enum', 'extern' or 'fn', got '%s'", p->current.text);
-            break;
+            if (p->diag) {
+                oath_diag_report(p->diag, DIAG_ERR_UNEXPECTED_TOKEN, p->current.line, p->current.col,
+                                 "Expected 'struct', 'enum', 'extern' or 'fn', found '%s'", p->current.text);
+            }
+            synchronize(p);
         }
     }
     return mod;
